@@ -1,0 +1,11 @@
+
+{
+  "name": "RovilClient",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedFirst": {
+      "$className": "ReplicatedFirst",
+      "$path": "src/client_init"
+    }
+  }
+}

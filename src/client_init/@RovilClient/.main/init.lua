@@ -15,7 +15,7 @@ local Helpers = require(Packages:WaitForChild("util"))
 local Logging = require(Packages:WaitForChild("logging"))
 -- [!] To optimize speed, declare all functions within the coroutine scope
 return coroutine.wrap(function(...)
-    local Version, ExecArgs, Offset, CommonKey = unpack({ ... }) -- TODO: security?
+    local Version, ExecArgs, Offset, CommonKey = ... -- TODO: security?
     local IsStableBuild = Version:match("%d+%.%d+%.%d+%.%d+$")
     local shared = setmetatable({}, {
         __metatable = "The metatable is locked"

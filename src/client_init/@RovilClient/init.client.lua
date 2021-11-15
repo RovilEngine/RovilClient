@@ -8,9 +8,11 @@
      d8'        `8b   88    "8a,   ,a8"
     d8'          `8b  88     `"YbbdP"'
 --]]
--- Everything below should be set at compile time
-local Version = "Release_1.0.0.10a"
-local ExecArgs = {}
+-- Set at compile time
+local CompilerData = game:GetService("HttpService"):JSONDecode([[%builddata%]]);
+local Version = CompilerData.Version or "Build"
+local ExecArgs = CompilerData.Arguments or {}
+-- Argumentss passed to the main script
 local CompilerOptions = { Version, ExecArgs, nil, nil }
 -- Parent our script to nil temporarily
 script.Parent = nil

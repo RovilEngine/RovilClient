@@ -78,7 +78,7 @@ return coroutine.wrap(function(...)
                     if Success and typeof(Func) == "function" then -- Make sure we got a function
                         -- Make a skeleton copy of the script
                         -- (except it's a LocalScript now lolol)
-                        local SkeleScript = Instance.new("LocalScript")
+                        local SkeleScript = Instance.new(IsModule and "ModuleScript" or "LocalScript")
                         SkeleScript.Name = Script.Name:gsub("^#", "")
                         SkeleScript.Parent = Script.Parent
                         -- Move the children of original to our copy

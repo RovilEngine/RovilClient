@@ -67,7 +67,7 @@ return coroutine.wrap(function(...)
                 Log:Error(ScriptName, "flagged as compiled, but contains invalid/unreadable instructions")
             else
                 WriteDebug("NOTICE: Preparing to load script \"" .. ScriptName .. "\"")
-                local Success, Bytecode = pcall(Helpers.InstructionsToBytecode, Instructions)
+                local Success, Bytecode = pcall(Helpers.InstructionsToBytecode, Instructions, Offset)
                 if Success and typeof(Bytecode) == "string" then -- Make sure bytecode exists
                     local Success, Func = pcall(LuaVM.LoadBytecode, Bytecode)
                     if Success and typeof(Func) == "function" then -- Make sure we got a function

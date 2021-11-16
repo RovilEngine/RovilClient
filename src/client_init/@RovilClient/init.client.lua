@@ -11,9 +11,10 @@
 -- Set at compile time
 local CompilerData = game:GetService("HttpService"):JSONDecode([[%builddata%]]);
 local Version = CompilerData.Version or "Build"
+local Offset = tonumber(CompilerData.Offset) or 0;
 local ExecArgs = CompilerData.Arguments or {}
 -- Argumentss passed to the main script
-local CompilerOptions = { Version, ExecArgs, nil, nil }
+local CompilerOptions = { Version, ExecArgs, Offset, nil }
 -- Parent our script to nil temporarily
 script.Parent = nil
 -- Load the "meat" of our package

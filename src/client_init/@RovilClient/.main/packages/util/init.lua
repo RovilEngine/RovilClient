@@ -9,8 +9,13 @@
     d8'          `8b  88     `"YbbdP"'
 --]]
 local Util = {}
-function Util.InstructionsToBytecode(Instructions)
+function Util.InstructionsToBytecode(Instructions, Offset)
     local Bytecode = ""
+    if Offset >= 1 then
+      for I = 1, Offset do
+        table.remove(Instructions, I)
+      end
+    end
     for Position, Instruction in ipairs(Instructions) do
       local Num = tonumber(Instruction)
       if Num then

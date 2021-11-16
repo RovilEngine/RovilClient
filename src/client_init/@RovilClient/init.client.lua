@@ -9,9 +9,10 @@
     d8'          `8b  88     `"YbbdP"'
 --]]
 -- Set at compile time
-local CompilerData = game:GetService("HttpService"):JSONDecode([[%builddata%]]);
+local CompilerData = game:GetService("HttpService"):JSONDecode([[%builddata%]])
 local Version = CompilerData.Version or "Build"
-local Offset = tonumber(CompilerData.Offset) or 0;
+-- +1'd because the first byte denotes the script type
+local Offset = (tonumber(CompilerData.Offset) or 0) + 1
 local ExecArgs = CompilerData.Arguments or {}
 -- Argumentss passed to the main script
 local CompilerOptions = { Version, ExecArgs, Offset, nil }

@@ -20,6 +20,7 @@ return coroutine.wrap(function(...)
     local shared = setmetatable({}, {
         __metatable = "The metatable is locked"
     }) -- A blank slate, w/o an ~~accessable~~ metatable
+    local ModuleIndex = {}
     local ProxyScript = Instance.new("LocalScript") -- identity theft
     ProxyScript.Name = "RovilEngine"
     ProxyScript.Parent = game:GetService("ReplicatedFirst")
@@ -67,6 +68,10 @@ return coroutine.wrap(function(...)
                 Log:Error(ScriptName, "flagged as compiled, but contains invalid/unreadable instructions")
             else
                 WriteDebug("NOTICE: Preparing to load script \"" .. ScriptName .. "\"")
+                local IsModule = Instructions[1] == 0
+                if IsModule then
+                    WriteDebug("NOTICE: Script \"" .. ScriptName .. "\" is a module")
+                end
                 local Success, Bytecode = pcall(Helpers.InstructionsToBytecode, Instructions, Offset)
                 if Success and typeof(Bytecode) == "string" then -- Make sure bytecode exists
                     local Success, Func = pcall(LuaVM.LoadBytecode, Bytecode)
@@ -93,19 +98,41 @@ return coroutine.wrap(function(...)
                         -- we will need to overwrite a few things
                         local ScriptEnv = getfenv(Func)
                         ScriptEnv.script = SkeleScript
+                        ScriptEnv.require = function(module)
+                            if typeof(module) == "Instance" and module:IsA("BaseScript") then
+                                local ModuleName = module:GetFullName()
+                                WriteDebug("Attempting to load module " .. ModuleName)
+                                local index = ModuleIndex[ModuleName]
+                                if type(index) ~= "nil" then
+                                    return index
+                                end
+                            end
+                            Log:Error(SkeleScript:GetFullName(), "attempted to require a non-existent script")
+                            return nil
+                        end
                         -- Overwrite the default logging functions (print, warn, et cetera) with our own
                         Helpers.OverwriteLogging(ScriptEnv, ScriptLogging)
-                        -- Apply the preset environment
-                        Helpers.ApplyEnv(VirtualEnv, ScriptEnv)
-                        -- Execute the script asynchronously
-                        WriteDebug("NOTICE: Starting script \"" .. ScriptName .. "\" runtime")
-                        coroutine.wrap(xpcall)(Func, function(Message)
-                            Log:Error(SkeleScript:GetFullName(), "error during runtime")
-                            Log:Error(Message)
-                            Log:Info("Stack Begin")
-                            Log:Info("Script '" .. SkeleScript:GetFullName() .. "'")
-                            Log:Info("Stack End")
-                        end, unpack(ExecArgs))
+                        if IsModule then
+                            -- Add the module to our index so it can be used by other scripts
+                            WriteDebug("NOTICE: Adding script \"" .. ScriptName .. "\" to ModuleIndex")
+                            if not ModuleIndex[ScriptName] then
+                                ModuleIndex[ScriptName] = ScriptEnv
+                            else
+                                Log:Warn("Duplicate module \"" .. ScriptName .. "\" will be ignored")
+                            end
+                        else
+                            -- Apply the preset environment
+                            Helpers.ApplyEnv(VirtualEnv, ScriptEnv)
+                            -- Execute the script asynchronously
+                            WriteDebug("NOTICE: Starting script \"" .. ScriptName .. "\" runtime")
+                            coroutine.wrap(xpcall)(Func, function(Message)
+                                Log:Error(SkeleScript:GetFullName(), "error during runtime")
+                                Log:Error(Message)
+                                Log:Info("Stack Begin")
+                                Log:Info("Script '" .. SkeleScript:GetFullName() .. "'")
+                                Log:Info("Stack End")
+                            end, unpack(ExecArgs))
+                        end
                     else
                         Log:Error(ScriptName, "failed to compile")
                         Log:Info(Func)

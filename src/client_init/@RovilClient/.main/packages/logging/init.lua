@@ -13,7 +13,11 @@ local Logger = {}
 Logger.__index = Logger
 local TestService = game:GetService("TestService")
 local function ConcatArgs(...)
-    return table.concat({...}, " ")
+    local str = ""
+    for _, V in ipairs({...}) do
+        str = str .. " " .. tostring(V)
+    end
+    return str
 end
 function Logger:Print(...)
     -- I like consistency

@@ -11,8 +11,7 @@
 -- Set at compile time
 local CompilerData = game:GetService("HttpService"):JSONDecode([[%builddata%]])
 local Version = CompilerData.Version or "Build"
--- +1'd because the first byte denotes the script type
-local Offset = (tonumber(CompilerData.Offset) or 0) + 1
+local Offset = (tonumber(CompilerData.Offset) or 0)
 local ExecArgs = CompilerData.Arguments or {}
 -- Argumentss passed to the main script
 local CompilerOptions = { Version, ExecArgs, Offset, nil }

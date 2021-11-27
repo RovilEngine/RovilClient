@@ -140,7 +140,6 @@ return coroutine.wrap(function(...)
 						-- Get the environment of our script's function
 						-- we will need to overwrite a few things
 						local ScriptEnv = getfenv(Func)
-						ScriptEnv.xx = nil -- The compiler likes to give this out? Not really sure why. Will fix in a later version.
 						ScriptEnv.script = SkeleScript
 						ScriptEnv.require = function(Module)
 							if typeof(Module) == "Instance" and instance_IsA(Module, "ModuleScript") then

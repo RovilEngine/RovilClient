@@ -34,8 +34,6 @@ local lua_opcode_names = {
 	"CLOSURE",  "VARARG"
 };
 
-xx=0
-
 --- Extract bits from an integer
 local function get_bits(input, n, n2)
 	if n2 then
@@ -70,8 +68,6 @@ local function decode_bytecode(bytecode)
 			return a
 		end
 		function get_int32()
-			xx = xx+1
-			--print(xx)
             local a, b, c, d = bytecode:byte(index, index + 3);
             index = index + 4;
             return d*16777216 + c*65536 + b*256 + a

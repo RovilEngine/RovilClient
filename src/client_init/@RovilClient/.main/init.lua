@@ -40,8 +40,8 @@ return coroutine.wrap(function(...)
 		return I.GetChildren(I)
 	end
 	local HttpService = game_GetService("HttpService")
-	local function http_JsonEncode(T)
-		return HttpService.JsonEncode(HttpService, T)
+	local function http_JsonDecode(T)
+		return select(2, pcall(HttpService.JSONDecode, HttpService, T))
 	end
 	local RunService = game_GetService("RunService")
 	local Debris = game_GetService("Debris")
@@ -78,6 +78,15 @@ return coroutine.wrap(function(...)
 	end
 	Log:Print("Client initialization begin")
 	local LocalPlayer = Players.LocalPlayer
+	-- Custom error handling
+	local function HandleError(Err, Src, CLog)
+		CLog = CLog or Log
+		Err = string.gsub(Err, "^.+:%d+: ", "")
+		CLog:Error(Err)
+		CLog:Info("Stack Begin")
+		CLog:Info("Script '" .. Src .. "'")
+		CLog:Info("Stack End")
+	end
 	-- This is the virtual environment we will apply to every script
 	local VirtualEnv = {
 		shared = shared,
@@ -91,6 +100,35 @@ return coroutine.wrap(function(...)
 		-- would take a bit of VM modification but shouldn't be too hard
 		-- can not think of a good usecase for this though, so it will sit on the backburner.
 	}
+	-- Our custom require() function
+	local function GlobalRequire(Module)
+		if typeof(Module) == "Instance" and instance_IsA(Module, "ModuleScript") then
+			local ModuleName = instance_GetFullname(Module)
+			WriteDebug("NOTICE: Attempting to load module " .. ModuleName)
+			local Index = ModuleIndex[ModuleName]
+			if Index then
+				local ModuleFunc = Index.Func
+				local ModuleInstance = Index.Skele
+				local ScriptLogging = Index.Log
+				if type(ModuleFunc) == "function" then
+					local Fenv = getfenv(ModuleFunc)
+					Fenv.Script = ModuleInstance
+					Fenv.script = ModuleInstance
+					Fenv.require = GlobalRequire
+					local Success, Return = pcall(ModuleFunc)
+					if Success then
+						return Return
+					else
+						ScriptLogging:Error(ModuleName, "error loading module")
+						HandleError(Return, ModuleName, ScriptLogging)
+						return nil
+					end
+				end
+			end
+		end
+		Log:Error("attempted to require a non-existent script")
+		return nil
+	end
 	-- The funny function that actually loads our scripts into memory and runs them
 	local function LoadScript(Script, ModulesOnly)
 		local OldScriptName = Script.Name
@@ -152,40 +190,14 @@ return coroutine.wrap(function(...)
 						local ScriptEnv = getfenv(Func)
 						ScriptEnv.script = SkeleScript
 						ScriptEnv.Script = SkeleScript
-						ScriptEnv.require = function(Module)
-							if typeof(Module) == "Instance" and instance_IsA(Module, "ModuleScript") then
-								local ModuleName = instance_GetFullname(Module)
-								WriteDebug("NOTICE: Attempting to load module " .. ModuleName)
-								local Index = ModuleIndex[ModuleName]
-								if Index then
-									local ModuleFunc = Index.Func
-									local ModuleDebugFunc = Index.Dbg
-									if type(ModuleFunc) == "function" then
-										local Success, Return = pcall(ModuleFunc)
-										if Success then
-											return Return
-										else
-											ScriptLogging:Error(ModuleName, "error loading module")
-											ScriptLogging:Error(Return)
-											ScriptLogging:Info("Stack Begin")
-											ScriptLogging:Info("Script '" .. ModuleName .. "'")
-											ScriptLogging:Info("Script '" .. ScriptName .. "'")
-											ScriptLogging:Info("Stack End")
-											return nil
-										end
-									end
-								end
-							end
-							Log:Error(instance_GetFullname(SkeleScript), "attempted to require a non-existent script")
-							return nil
-						end
+						ScriptEnv.require = GlobalRequire
 						local SkeleScriptName = instance_GetFullname(SkeleScript)
 						-- Overwrite the default logging functions (print, warn, et cetera) with our own
 						Helpers.OverwriteLogging(ScriptEnv, ScriptLogging)
 						if IsModule then
 							-- Add the module to our index so it can be used by other scripts
 							if not ModuleIndex[instance_GetFullname(Script)] then
-								ModuleIndex[ScriptNameRaw] = { Func = Func, Dbg = FuncDebug }
+								ModuleIndex[ScriptNameRaw] = { Func = Func, Dbg = FuncDebug, Skele = SkeleScript, Log = ScriptLogging }
 								WriteDebug("NOTICE: Script \"" .. ScriptName .. "\" added to ModuleIndex (as \"" .. ScriptNameRaw .. "\")")
 							else
 								Log:Warn("Duplicate module \"" .. ScriptName .. "\" will be ignored")
@@ -196,11 +208,7 @@ return coroutine.wrap(function(...)
 							-- Execute the script asynchronously
 							WriteDebug("NOTICE: Starting script \"" .. ScriptName .. "\" runtime")
 							coroutine.wrap(xpcall)(Func, function(Message)
-								Message = string.gsub(Message, "^.+: ", "")
-								ScriptLogging:Error(Message)
-								ScriptLogging:Info("Stack Begin")
-								ScriptLogging:Info("Script '" .. SkeleScriptName .. "'")
-								ScriptLogging:Info("Stack End")
+								HandleError(Message, SkeleScriptName, ScriptLogging)
 							end, unpack(ExecArgs))
 						end
 					else

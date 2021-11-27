@@ -8,6 +8,7 @@
      d8'        `8b   88    "8a,   ,a8"
     d8'          `8b  88     `"YbbdP"'
 --]]
+
 local lua_opcode_types = {
 	"ABC",  "ABx", "ABC",  "ABC",
 	"ABC",  "ABx", "ABC",  "ABx", 
@@ -488,7 +489,7 @@ local function create_wrapper(cache, upvalues)
 					loop = loop + 1
 					args[loop] = stack[i];
 				end
-				
+				-- TODO: C interoperability/__namecall-ing
 				limit, results = handle_return(stack[A](unpack(args, 1, limit-A)))
 			else
 				limit, results = handle_return(stack[A]())
@@ -617,7 +618,7 @@ local function create_wrapper(cache, upvalues)
 			local stack = stack
 
 			if C == 0 then
-				error("NYI: extended SETLIST")
+				warn("Not implemented: extended setlist")
 			else
 				local offset = (C - 1) * 50
 				local t = stack[A]
@@ -631,7 +632,19 @@ local function create_wrapper(cache, upvalues)
 			end
 		end,
 		[35] = function(instruction)	-- CLOSE
-			error("NYI: CLOSE")
+			-- void lua_close (lua_State *L);
+			local A = instruction.A
+			local B = instruction.B
+			local C = instruction.C
+			local thread = stack[A]
+			if B == 0 then
+				warn("Partial implementation: lua_close")
+				B = top
+			end
+			if type(thread) == "thread" then
+				coroutine.yield(thread) -- yield thread
+				stack[A] = nil -- free stack
+			end
 		end,
 		[36] = function(instruction)	-- CLOSURE
 			local proto = prototypes[instruction.Bx]
@@ -736,8 +749,8 @@ local function create_wrapper(cache, upvalues)
 			else
 				--TODO error converting
 				--local line = cache.debug.lines[IP];
-				local err  = string.gsub(b, "^.+: ", "");
-				error(err);
+				--local err  = string.gsub(b, "^.+:%d+: ", "");
+				error(b);
 			end
 		end
 	end

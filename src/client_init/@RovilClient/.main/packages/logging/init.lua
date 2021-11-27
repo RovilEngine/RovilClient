@@ -11,7 +11,7 @@
 local Logging = {}
 local Logger = {}
 Logger.__index = Logger
-local TestService = game:GetService("TestService")
+local TestService = game.GetService(game, "TestService")
 local function ConcatArgs(...)
     local str = ""
     for _, V in ipairs({...}) do
@@ -24,13 +24,13 @@ function Logger:Print(...)
     return print("TestService." .. self.Source.Name .. "(0):", ConcatArgs(self.Prefix, ...))
 end
 function Logger:Error(...)
-    return TestService:Error(ConcatArgs(self.Prefix, ...), self.Source)
+    return TestService.Error(TestService, ConcatArgs(self.Prefix, ...), self.Source)
 end
 function Logger:Warn(...)
-    return TestService:Warn(false, ConcatArgs(self.Prefix, ...), self.Source)
+    return TestService.Warn(TestService, false, ConcatArgs(self.Prefix, ...), self.Source)
 end
 function Logger:Info(...)
-    return TestService:Message(ConcatArgs(self.Prefix, ...), self.Source)
+    return TestService.Message(TestService, ConcatArgs(self.Prefix, ...), self.Source)
 end
 function Logging.new(Options)
     local self = setmetatable({}, Logger)

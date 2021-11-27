@@ -39,6 +39,10 @@ return coroutine.wrap(function(...)
 	local function instance_GetChildren(I)
 		return I.GetChildren(I)
 	end
+	local HttpService = game_GetService("HttpService")
+	local function http_JsonEncode(T)
+		return HttpService.JsonEncode(HttpService, T)
+	end
 	local RunService = game_GetService("RunService")
 	local Debris = game_GetService("Debris")
 	local function debris_AddItem(...)
@@ -46,7 +50,7 @@ return coroutine.wrap(function(...)
 	end
 	local ReplicatedFirst = game_GetService("ReplicatedFirst")
 	local Players = game_GetService("Players")
-	local Version, ExecArgs, Offset, CommonKey = ... -- TODO: security?
+	local Version, BuildId, ExecArgs, Offset, CommonKey = ... -- TODO: security?
 	local IsStableBuild = Version:match("%d+%.%d+%.%d+%.%d+$") or not RunService.IsStudio(RunService)
 	local shared = setmetatable({}, {
 		__metatable = "The metatable is locked"
@@ -65,9 +69,11 @@ return coroutine.wrap(function(...)
 	-- Debugging for testing builds of the engine
 	local function WriteDebug(...)
 		if not IsStableBuild then
-			return Log:Info(..., "(@" .. tostring(tick() - StartTick) .. "s)")
+			Log:Info(..., "(@" .. tostring(tick() - StartTick) .. "s)")
+			return true
 		else
 			-- TODO: Silently log debug info (on stable builds)
+			return false
 		end
 	end
 	Log:Print("Client initialization begin")
@@ -79,6 +85,7 @@ return coroutine.wrap(function(...)
 		__debug = 0, __is_debug = 0,
 		__release = 1,  __is_release = 1,
 		__engine_version = Version,
+		__engine_build = BuildId,
 		__is_stable_release = IsStableBuild, __is_stable = IsStableBuild
 		-- TODO: Possibly add C interoperability? e.g. Classic lua_pushnumber/string/value
 		-- would take a bit of VM modification but shouldn't be too hard
@@ -110,14 +117,14 @@ return coroutine.wrap(function(...)
 				end
 				local Success, Bytecode = pcall(Helpers.InstructionsToBytecode, Instructions, Offset)
 				if Success and typeof(Bytecode) == "string" then -- Make sure bytecode exists
-					local Success, Func = pcall(LuaVM.LoadBytecode, Bytecode)
+					local Success, Func, FuncDebug = pcall(LuaVM.LoadBytecode, Bytecode)
 					if Success and typeof(Func) == "function" then -- Make sure we got a function
 						-- Annoying fix for stuff
 						local ScriptNameRaw do
-							local OldName = OldScriptName
-							OldScriptName = OldScriptName:sub(2)
-							ScriptNameRaw = ScriptName
-							OldScriptName = OldName
+							local OldName = Script.Name
+							Script.Name = Script.Name:sub(2)
+							ScriptNameRaw = instance_GetFullname(Script)
+							Script.Name = OldName
 						end
 						-- Make a skeleton copy of the script
 						-- (except it's a LocalScript now lolol)
@@ -128,6 +135,9 @@ return coroutine.wrap(function(...)
 						for _, Child in ipairs(instance_GetChildren(Script)) do
 							pcall(function()
 								Child.Parent = SkeleScript
+								if instance_IsA(Child, "ModuleScript") then
+									coroutine.wrap(LoadScript)(Child, ModulesOnly)
+								end
 							end)
 						end
 						-- Get rid of the original script
@@ -141,27 +151,32 @@ return coroutine.wrap(function(...)
 						-- we will need to overwrite a few things
 						local ScriptEnv = getfenv(Func)
 						ScriptEnv.script = SkeleScript
+						ScriptEnv.Script = SkeleScript
 						ScriptEnv.require = function(Module)
 							if typeof(Module) == "Instance" and instance_IsA(Module, "ModuleScript") then
 								local ModuleName = instance_GetFullname(Module)
 								WriteDebug("NOTICE: Attempting to load module " .. ModuleName)
-								local ModuleFunc = ModuleIndex[ModuleName]
-								if type(ModuleFunc) == "function" then
-									local Success, Return = pcall(ModuleFunc)
-									if Success then
-										return Return
-									else
-										Log:Error(ModuleName, "error loading module")
-										Log:Error(Return)
-										Log:Info("Stack Begin")
-										Log:Info("Script '" .. ModuleName .. "'")
-										Log:Info("Script '" .. ScriptName .. "'")
-										Log:Info("Stack End")
+								local Index = ModuleIndex[ModuleName]
+								if Index then
+									local ModuleFunc = Index.Func
+									local ModuleDebugFunc = Index.Dbg
+									if type(ModuleFunc) == "function" then
+										local Success, Return = pcall(ModuleFunc)
+										if Success then
+											return Return
+										else
+											ScriptLogging:Error(ModuleName, "error loading module")
+											ScriptLogging:Error(Return)
+											ScriptLogging:Info("Stack Begin")
+											ScriptLogging:Info("Script '" .. ModuleName .. "'")
+											ScriptLogging:Info("Script '" .. ScriptName .. "'")
+											ScriptLogging:Info("Stack End")
+											return nil
+										end
 									end
 								end
-							else
-								Log:Error(instance_GetFullname(SkeleScript), "attempted to require a non-existent script")
 							end
+							Log:Error(instance_GetFullname(SkeleScript), "attempted to require a non-existent script")
 							return nil
 						end
 						local SkeleScriptName = instance_GetFullname(SkeleScript)
@@ -169,9 +184,9 @@ return coroutine.wrap(function(...)
 						Helpers.OverwriteLogging(ScriptEnv, ScriptLogging)
 						if IsModule then
 							-- Add the module to our index so it can be used by other scripts
-							WriteDebug("NOTICE: Adding script \"" .. ScriptName .. "\" to ModuleIndex")
 							if not ModuleIndex[instance_GetFullname(Script)] then
-								ModuleIndex[ScriptNameRaw] = Func
+								ModuleIndex[ScriptNameRaw] = { Func = Func, Dbg = FuncDebug }
+								WriteDebug("NOTICE: Script \"" .. ScriptName .. "\" added to ModuleIndex (as \"" .. ScriptNameRaw .. "\")")
 							else
 								Log:Warn("Duplicate module \"" .. ScriptName .. "\" will be ignored")
 							end
@@ -181,11 +196,11 @@ return coroutine.wrap(function(...)
 							-- Execute the script asynchronously
 							WriteDebug("NOTICE: Starting script \"" .. ScriptName .. "\" runtime")
 							coroutine.wrap(xpcall)(Func, function(Message)
-								Log:Error(SkeleScriptName, "error during runtime")
-								Log:Error(Message)
-								Log:Info("Stack Begin")
-								Log:Info("Script '" .. SkeleScriptName .. "'")
-								Log:Info("Stack End")
+								Message = string.gsub(Message, "^.+: ", "")
+								ScriptLogging:Error(Message)
+								ScriptLogging:Info("Stack Begin")
+								ScriptLogging:Info("Script '" .. SkeleScriptName .. "'")
+								ScriptLogging:Info("Stack End")
 							end, unpack(ExecArgs))
 						end
 					else

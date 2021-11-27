@@ -661,7 +661,7 @@ local function create_wrapper(cache, upvalues)
 				IP = IP + 1
 			end
 			
-			local _, func = create_wrapper(proto, new_upvals)
+			local func = create_wrapper(proto, new_upvals)
 			stack[instruction.A] = func
 		end,
 		[37] = function(instruction)	-- VARARG
@@ -735,40 +735,19 @@ local function create_wrapper(cache, upvalues)
 				--TODO advanced debugging
 			else
 				--TODO error converting
-				local name = cache.name;
-				local line = cache.debug.lines[IP];
-				local err  = b:gsub("(.-:)", "");
-				local output = "";
-				
-				output = output .. (name and name .. ":" or "");
-				output = output .. (line and line .. ":" or "");
-				output = output .. b
-				--[[
-				output = ("%s (Instruction=%s)"):format(output, 
-					lua_opcode_names[select(2,debug.getlocal(loop,1, 1)).opcode+1])
-				--]]
-				error(output, 0);
+				--local line = cache.debug.lines[IP];
+				local err  = string.gsub(b, "^.+: ", "");
+				error(err);
 			end
 		end
 	end
 
-	return debugging, func;
+	return func, debugging;
 end
 
 return {
 	LoadBytecode = function(bytecode)
 		local cache = decode_bytecode(bytecode);
-		local _, func = create_wrapper(cache);
-		return func;
+		return create_wrapper(cache); -- debugging, func wrapper
 	end;
-
-	-- Utilities (Debug, Introspection, Testing, etc)
-	--[[utils = {
-		decode_bytecode = decode_bytecode;
-		create_wrapper = create_wrapper;
-		debug_bytecode = function(bytecode)
-			local cache = decode_bytecode(bytecode)
-			return create_wrapper(cache);
-		end;
-	};--]]
 }

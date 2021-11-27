@@ -44,9 +44,9 @@ function Util.OverwriteLogging(Env, Logger)
   function Env.print(...)
     return Logger:Print(...)
   end
-  function Env.error(...)
-    return Logger:Error(...)
-  end
+  --function Env.error(...)
+  --  return Logger:Error(...)
+  --end
   function Env.warn(...)
     return Logger:Warn(...)
   end

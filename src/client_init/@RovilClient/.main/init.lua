@@ -31,7 +31,7 @@ return coroutine.wrap(function(...)
 		return E.Connect(E, F)
 	end
 	local function instance_IsA(I, A)
-		return I.IsA(A)
+		return I.IsA(I, A)
 	end
 	local function instance_GetFullname(I)
 		return I.GetFullName(I)

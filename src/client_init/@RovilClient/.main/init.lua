@@ -8,22 +8,53 @@
      d8'        `8b   88    "8a,   ,a8"
     d8'          `8b  88     `"YbbdP"'
 --]]
+-- [!] "Secure" functions to circumvent __namecall hooking
+-- --- Does not circumvent __index hooking
+local function game_GetService(S)
+	return game.GetService(game, S)
+end
+local function instance_FindFirstChild(I, C)
+	return I.FindFirstChild(I, C)
+end
+local function instance_WaitForChild(I, C)
+	task.wait()
+	return instance_FindFirstChild(I, C) or instance_WaitForChild(I, C)
+end
 -- [!] Declare required imports before module is destroyed
-local Packages = script:WaitForChild("packages")
-local LuaVM = require(Packages:WaitForChild("lua_vm"))
-local Helpers = require(Packages:WaitForChild("util"))
-local Logging = require(Packages:WaitForChild("logging"))
+local Packages = instance_WaitForChild(script, "packages")
+local LuaVM = require(instance_WaitForChild(Packages, "lua_vm"))
+local Helpers = require(instance_WaitForChild(Packages, "util"))
+local Logging = require(instance_WaitForChild(Packages, "logging"))
 -- [!] To optimize speed, declare all functions within the coroutine scope
 return coroutine.wrap(function(...)
+	local function ev_Connect(E, F)
+		return E.Connect(E, F)
+	end
+	local function instance_IsA(I, A)
+		return I.IsA(A)
+	end
+	local function instance_GetFullname(I)
+		return I.GetFullName(I)
+	end
+	local function instance_GetChildren(I)
+		return I.GetChildren(I)
+	end
+	local RunService = game_GetService("RunService")
+	local Debris = game_GetService("Debris")
+	local function debris_AddItem(...)
+		return Debris.AddItem(Debris, ...)
+	end
+	local ReplicatedFirst = game_GetService("ReplicatedFirst")
+	local Players = game_GetService("Players")
 	local Version, ExecArgs, Offset, CommonKey = ... -- TODO: security?
-	local IsStableBuild = Version:match("%d+%.%d+%.%d+%.%d+$")
+	local IsStableBuild = Version:match("%d+%.%d+%.%d+%.%d+$") or not RunService.IsStudio(RunService)
 	local shared = setmetatable({}, {
 		__metatable = "The metatable is locked"
 	}) -- A blank slate, w/o an ~~accessable~~ metatable
 	local ModuleIndex = {}
 	local ProxyScript = Instance.new("LocalScript") -- identity theft
 	ProxyScript.Name = "RovilEngine"
-	ProxyScript.Parent = game:GetService("ReplicatedFirst")
+	ProxyScript.Parent = ReplicatedFirst
 	-- Logging logging logging
 	local Log = Logging.new({
 		Prefix = "Rovil/Client",
@@ -39,15 +70,9 @@ return coroutine.wrap(function(...)
 			-- TODO: Silently log debug info (on stable builds)
 		end
 	end
-	-- Let e'eryone know we're starting up
 	Log:Print("Client initialization begin")
-	local Debris = game:GetService("Debris")
-	-- Me when
-	local LocalPlayer = game:GetService("Players").LocalPlayer
-	-- This is the virtual environment we will apply to every script.
-	-- The important thing here is the "shared" replacement.
-	-- Because I have yet to figure out a way to support require()-ing modules,
-	-- any + all oop/modular code will need to be fed through shared
+	local LocalPlayer = Players.LocalPlayer
+	-- This is the virtual environment we will apply to every script
 	local VirtualEnv = {
 		shared = shared,
 		_G = _G,
@@ -61,14 +86,20 @@ return coroutine.wrap(function(...)
 	}
 	-- The funny function that actually loads our scripts into memory and runs them
 	local function LoadScript(Script, ModulesOnly)
-		local ScriptName = Script:GetFullName()
-		if Script:IsA("ModuleScript") and (Script.Name:match("^#") or Script.Name:match("^*")) then -- # = LocalScript, * = ModuleScript
+		local OldScriptName = Script.Name
+		local ScriptName = instance_GetFullname(Script)
+		if instance_IsA(Script, "ModuleScript") and (OldScriptName:match("^#") or OldScriptName:match("^*")) then -- # = LocalScript, * = ModuleScript
 			local Instructions = require(Script)
-			if typeof(Instructions) ~= "table" or #Instructions < 1 then -- EXTREMELY limited sanity check; better than nothing
-				Log:Error(ScriptName, "flagged as compiled, but contains invalid/unreadable instructions")
+			if typeof(Instructions) ~= "table" then -- EXTREMELY limited sanity check; better than nothing
+				if #Instructions == 1 and Instructions[1] == 0 then
+					Log:Error(ScriptName, "was not compiled due to an issue at build time")
+					Log:Error("Please check within the script for further information")
+				else
+					Log:Error(ScriptName, "flagged as compiled, but contains invalid/unreadable instructions")
+				end
 			else
 				WriteDebug("NOTICE: Preparing to load script \"" .. ScriptName .. "\"")
-				local IsModule = Script.Name:match("^*")
+				local IsModule = OldScriptName:match("^*")
 				if IsModule then
 					WriteDebug("NOTICE: Script \"" .. ScriptName .. "\" is a module")
 				else
@@ -83,36 +114,37 @@ return coroutine.wrap(function(...)
 					if Success and typeof(Func) == "function" then -- Make sure we got a function
 						-- Annoying fix for stuff
 						local ScriptNameRaw do
-							local OldName = Script.Name
-							Script.Name = Script.Name:sub(2)
-							ScriptNameRaw = Script:GetFullName()
-							Script.Name = OldName
+							local OldName = OldScriptName
+							OldScriptName = OldScriptName:sub(2)
+							ScriptNameRaw = ScriptName
+							OldScriptName = OldName
 						end
 						-- Make a skeleton copy of the script
 						-- (except it's a LocalScript now lolol)
 						local SkeleScript = Instance.new(IsModule and "ModuleScript" or "LocalScript")
-						SkeleScript.Name = Script.Name:sub(2)
+						SkeleScript.Name = OldScriptName:sub(2)
 						SkeleScript.Parent = Script.Parent
 						-- Move the children of original to our copy
-						for _, Child in ipairs(Script:GetChildren()) do
+						for _, Child in ipairs(instance_GetChildren(Script)) do
 							pcall(function()
 								Child.Parent = SkeleScript
 							end)
 						end
 						-- Get rid of the original script
-						Debris:AddItem(Script, -1)
+						debris_AddItem(Script, -1)
 						-- Set up custom logging for our script
 						local ScriptLogging = Logging.new({
-							Prefix = Script.Name,
+							Prefix = OldScriptName,
 							Source = SkeleScript
 						})
 						-- Get the environment of our script's function
 						-- we will need to overwrite a few things
 						local ScriptEnv = getfenv(Func)
+						ScriptEnv.xx = nil -- The compiler likes to give this out? Not really sure why. Will fix in a later version.
 						ScriptEnv.script = SkeleScript
 						ScriptEnv.require = function(Module)
-							if typeof(Module) == "Instance" and Module:IsA("ModuleScript") then
-								local ModuleName = Module:GetFullName()
+							if typeof(Module) == "Instance" and instance_IsA(Module, "ModuleScript") then
+								local ModuleName = instance_GetFullname(Module)
 								WriteDebug("NOTICE: Attempting to load module " .. ModuleName)
 								local ModuleFunc = ModuleIndex[ModuleName]
 								if type(ModuleFunc) == "function" then
@@ -129,16 +161,17 @@ return coroutine.wrap(function(...)
 									end
 								end
 							else
-								Log:Error(SkeleScript:GetFullName(), "attempted to require a non-existent script")
+								Log:Error(instance_GetFullname(SkeleScript), "attempted to require a non-existent script")
 							end
 							return nil
 						end
+						local SkeleScriptName = instance_GetFullname(SkeleScript)
 						-- Overwrite the default logging functions (print, warn, et cetera) with our own
 						Helpers.OverwriteLogging(ScriptEnv, ScriptLogging)
 						if IsModule then
 							-- Add the module to our index so it can be used by other scripts
 							WriteDebug("NOTICE: Adding script \"" .. ScriptName .. "\" to ModuleIndex")
-							if not ModuleIndex[Script:GetFullName()] then
+							if not ModuleIndex[instance_GetFullname(Script)] then
 								ModuleIndex[ScriptNameRaw] = Func
 							else
 								Log:Warn("Duplicate module \"" .. ScriptName .. "\" will be ignored")
@@ -149,10 +182,10 @@ return coroutine.wrap(function(...)
 							-- Execute the script asynchronously
 							WriteDebug("NOTICE: Starting script \"" .. ScriptName .. "\" runtime")
 							coroutine.wrap(xpcall)(Func, function(Message)
-								Log:Error(SkeleScript:GetFullName(), "error during runtime")
+								Log:Error(SkeleScriptName, "error during runtime")
 								Log:Error(Message)
 								Log:Info("Stack Begin")
-								Log:Info("Script '" .. SkeleScript:GetFullName() .. "'")
+								Log:Info("Script '" .. SkeleScriptName .. "'")
 								Log:Info("Stack End")
 							end, unpack(ExecArgs))
 						end
@@ -175,9 +208,9 @@ return coroutine.wrap(function(...)
 			-- Egh, it was easier to make this true by default so here we are
 			IsRecursive = true
 		end
-		for _, Script in ipairs(Start:GetChildren()) do
+		for _, Script in ipairs(instance_GetChildren(Start)) do
 			LoadScript(Script, ModulesOnly) -- Load it up!
-			if #Script:GetChildren() >= 1 and IsRecursive then
+			if #instance_GetChildren(Script) >= 1 and IsRecursive then
 				LoadScripts(Script, true, ModulesOnly)
 			end
 		end
@@ -186,22 +219,22 @@ return coroutine.wrap(function(...)
 	-- I'm """pretty""" confident that these are the only places I need to look for scripts
 	-- I'm also confident that I will end up being wrong ¯\_(ツ)_/¯
 	local SearchDirectories = { -- { <Instance>Location, <bool>Recursive? }
-		{ LocalPlayer:WaitForChild("PlayerScripts"), true },
-		{ LocalPlayer:WaitForChild("PlayerGui"), true },
-		{ LocalPlayer:WaitForChild("Backpack"), true },
-		{ game:GetService("ReplicatedFirst"), true }
+		{ instance_WaitForChild(LocalPlayer, "PlayerScripts"), true },
+		{ instance_WaitForChild(LocalPlayer, "PlayerGui"), true },
+		{ instance_WaitForChild(LocalPlayer, "Backpack"), true },
+		{ game_GetService("ReplicatedFirst"), true }
 	}
 	local ModuleSearchDirectories = {
 		unpack(SearchDirectories),
-		{ game:GetService("Workspace"), true },
-		{ game:GetService("Lighting"), true },
-		{ game:GetService("ReplicatedStorage"), true },
-		{ game:GetService("Chat"), true },
-		{ game:GetService("StarterGui"), true }
+		{ game_GetService("Workspace"), true },
+		{ game_GetService("Lighting"), true },
+		{ game_GetService("ReplicatedStorage"), true },
+		{ game_GetService("Chat"), true },
+		{ game_GetService("StarterGui"), true }
 	}
 	-- THIS! This is why recursiveness is enabled by default!
 	-- smh.
-	LocalPlayer.CharacterAdded:Connect(LoadScripts)
+	ev_Connect(LocalPlayer.CharacterAdded, LoadScripts)
 	-- Just a quick sanity check, although this script definitely should be loaded before the character
 	if typeof(LocalPlayer.Character) == "Instance" then
 		WriteDebug("UNEXPECTED: Character exists before script; execution running behind")
@@ -221,11 +254,11 @@ return coroutine.wrap(function(...)
 				Log:Info("Stack End")
 			end
 			-- Watch for new scripts we may need to load as well
-			Dir[1].DescendantAdded:Connect(LoadScript)
+			ev_Connect(Dir[1].DescendantAdded, LoadScript)
 		end
 	end
 	-- And we're done!
-	if game:IsLoaded() then
+	if game.IsLoaded(game) then
 		WriteDebug("UNEXPECTED: Game loaded before package runtime finished; execution running behind")
 	end
 	local ElapsedTicks = tostring(tick() - StartTick) -- How'd we do?

@@ -15,7 +15,7 @@ local TestService = game:GetService("TestService")
 local function ConcatArgs(...)
     local str = ""
     for _, V in ipairs({...}) do
-        str = str .. " " .. tostring(V)
+        str = str .. tostring(V) .. " "
     end
     return str
 end

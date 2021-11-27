@@ -8,15 +8,16 @@
      d8'        `8b   88    "8a,   ,a8"
     d8'          `8b  88     `"YbbdP"'
 --]]
--- Set at compile time
-local CompilerData = game:GetService("HttpService"):JSONDecode([[%builddata%]])
+-- Parent our script to nil temporarily
+script.Parent = nil
+-- Get data set by compiler
+local BuildData = script:WaitForChild("BuildData")
+local CompilerData = game:GetService("HttpService"):JSONDecode(BuildData.Value)
 local Version = CompilerData.Version or "Build"
 local Offset = (tonumber(CompilerData.Offset) or 0)
 local ExecArgs = CompilerData.Arguments or {}
 -- Argumentss passed to the main script
 local CompilerOptions = { Version, ExecArgs, Offset, nil }
--- Parent our script to nil temporarily
-script.Parent = nil
 -- Load the "meat" of our package
 local MainModule = script:WaitForChild(".main")
 local Main = require(MainModule)
